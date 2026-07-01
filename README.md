@@ -130,7 +130,7 @@ sadir team
 # Architecture
 ```
 
-sadir/
+GraphShield/
 │
 ├── README.md
 ├── requirements.txt
