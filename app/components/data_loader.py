@@ -13,7 +13,7 @@ PATHS = {
     "predictions":             os.path.join(ROOT, "results/predictions/hybrid_predictions.csv"),
     "explanation_graph":       os.path.join(ROOT, "results/explanations/gnn/explanation_graph.json"),
     "transaction_explanations":os.path.join(ROOT, "results/explanations/shap/transaction_explanations.csv"),
-    "feature_categories":      os.path.join(ROOT, "data/feature_categories.json"),
+    "feature_categories": os.path.join(ROOT, "results/shared/feature_categories.json"),
     "final_metrics":           os.path.join(ROOT, "results/metrics/final_metrics.json"),
 }
 

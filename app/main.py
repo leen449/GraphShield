@@ -15,9 +15,7 @@ Elliptic Bitcoin Dataset
 
 ---
 """)
-st.sidebar.page_link("pages/dashboard.py",           label="📊 Dashboard & 3D Graph")
-st.sidebar.page_link("pages/transaction_analysis.py", label="🔎 Transaction Analysis")
-st.sidebar.page_link("pages/network_view.py",         label="📋 Predictions Table")
+
 
 st.title("🛡️ GraphShields")
 st.markdown("""
