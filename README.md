@@ -1,6 +1,6 @@
 # GraphShield
 
-sadir is an AI-powered Anti-Money Laundering (AML) system that combines Graph Neural Networks, traditional Machine Learning, and Explainable AI to detect suspicious transaction patterns and provide investigators with transparent reasoning behind every prediction.
+GraphShield is an AI-powered Anti-Money Laundering (AML) system that combines Graph Neural Networks, traditional Machine Learning, and Explainable AI to detect suspicious transaction patterns and provide investigators with transparent reasoning behind every prediction.
 
 ---
 
@@ -21,7 +21,7 @@ This creates unnecessary investigation workload and makes decision-making diffic
 
 # Solution
 
-GraphShields models financial transactions as a graph.
+GraphShield models financial transactions as a graph.
 
 Each transaction becomes a node, and relationships between transactions become edges.
 
