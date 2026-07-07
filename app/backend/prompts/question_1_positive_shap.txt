@@ -1,0 +1,24 @@
+Task: Answer the predefined investigation question:
+
+"Which transaction characteristics contributed most to this prediction?"
+
+Use only the positive SHAP evidence supplied below.
+
+Transaction ID: {transaction_id}
+Prediction: {prediction}
+Risk Score: {risk_score}
+Positive SHAP Features: {positive_shap_features}
+Feature Categories: {feature_categories}
+
+Explain:
+1. Which supplied positive SHAP features had the strongest contribution.
+2. Their relative contribution based on the supplied SHAP values.
+3. Whether the strongest evidence belongs to Transaction Profile or Network Context, using only the supplied category mapping.
+
+Requirements:
+- Focus only on evidence that increased risk.
+- Do not discuss negative SHAP evidence.
+- Do not discuss GNN neighbor influence unless it is explicitly represented in the supplied positive SHAP evidence.
+- Do not infer the hidden real-world meaning of anonymized V-features.
+- Keep the response focused and avoid repeating the full initial analysis.
+- Use cautious professional language.

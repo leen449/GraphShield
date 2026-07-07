@@ -1,0 +1,27 @@
+Task: Answer the predefined investigation question:
+
+"How did neighboring transactions influence this prediction?"
+
+Use only the supplied graph and GNN evidence.
+
+Transaction ID: {transaction_id}
+Prediction: {prediction}
+Risk Score: {risk_score}
+GNN Importance: {gnn_importance}
+Important Neighbors: {important_neighbors}
+Important Edges: {important_edges}
+Selected Node: {selected_node}
+
+Explain:
+1. The role of the selected transaction within its analyzed neighborhood.
+2. How influential neighboring transactions or edges contributed to the graph-based evidence.
+3. Which supplied neighbors or edges were most influential, if available.
+4. What the graph evidence can and cannot establish.
+
+Requirements:
+- Do not use SHAP evidence.
+- Do not invent relationships beyond the supplied graph.
+- Do not claim that a neighboring transaction is criminal unless that label is explicitly supplied.
+- Do not infer identities or transaction purpose.
+- If neighbor evidence is incomplete, state that clearly.
+- Keep the response focused and avoid repeating the full initial analysis.

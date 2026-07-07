@@ -1,0 +1,25 @@
+Task: Answer the predefined investigation question:
+
+"Which evidence reduced the estimated risk?"
+
+Use only the supplied negative SHAP evidence.
+
+Transaction ID: {transaction_id}
+Prediction: {prediction}
+Risk Score: {risk_score}
+Negative SHAP Features: {negative_shap_features}
+Feature Categories: {feature_categories}
+
+Explain:
+1. Which supplied features reduced the estimated risk the most.
+2. Their relative effect based on the supplied negative SHAP values.
+3. Whether the risk-reducing evidence belongs to Transaction Profile or Network Context, using only the supplied category mapping.
+4. That risk-reducing evidence does not automatically override the final hybrid model prediction.
+
+Requirements:
+- Focus only on negative SHAP evidence.
+- Do not discuss positive SHAP evidence.
+- Do not discuss GNN neighbor influence.
+- Do not infer the hidden real-world meaning of anonymized V-features.
+- Emphasize that the explanation is based only on anonymized transaction and network information.
+- Keep the response focused and avoid repeating the initial analysis.
