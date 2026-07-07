@@ -1,0 +1,32 @@
+Task: Produce the initial investigation analysis for the selected transaction.
+
+Use the supplied TransactionContext only.
+
+Transaction evidence:
+- Transaction ID: {transaction_id}
+- Prediction: {prediction}
+- Risk Score: {risk_score}
+- GNN Importance: {gnn_importance}
+- Positive SHAP Features: {positive_shap_features}
+- Negative SHAP Features: {negative_shap_features}
+- Important Neighbors: {important_neighbors}
+- Important Edges: {important_edges}
+- Feature Categories: {feature_categories}
+
+Write a concise professional analysis in approximately 2-3 short paragraphs.
+
+The analysis must:
+1. State the model prediction and risk score.
+2. Explain the strongest positive SHAP evidence at a high level.
+3. Explain the network influence using only the supplied GNN and neighbor evidence.
+4. Provide an overall cautious interpretation.
+5. Mention the most important limitations, including that the available evidence is anonymized and does not establish real-world intent or confirm money laundering.
+6. End by stating that the transaction requires investigator review rather than presenting the model output as a final decision.
+
+Do not:
+- list every feature mechanically,
+- invent feature meanings,
+- infer identities,
+- state that a crime occurred,
+- provide legal advice,
+- recommend enforcement action.
