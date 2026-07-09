@@ -43,11 +43,11 @@ html,body{margin:0;padding:0;background:#0b0e14;overflow:hidden;font-family:-app
 .action-btn.primary{background:#6d4aff;border-color:#7e64ff;color:#fff}
 .action-btn.primary:hover{background:#7a5cff}
 .action-btn:disabled{opacity:.45;cursor:not-allowed}
-#legend{position:absolute;top:16px;left:16px;max-width:min(300px,calc(100% - 32px));box-sizing:border-box;color:#c4c9d4;font-size:11px;background:rgba(20,24,34,.88);padding:9px 13px;border-radius:8px;z-index:10;pointer-events:none}
+#legend{position:absolute;top:50px;left:16px;max-width:min(300px,calc(100% - 32px));box-sizing:border-box;color:#c4c9d4;font-size:11px;background:rgba(20,24,34,.88);padding:9px 13px;border-radius:8px;z-index:10;pointer-events:none}
 #legend span{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
 .legend-help{margin-top:5px;color:#8c93a6;font-size:10px}
 @media (max-width:900px){
-  #legend{top:10px;left:10px;font-size:10px;padding:7px 9px}
+  #legend{top:70px;left:10px;font-size:10px;padding:7px 9px}
   .legend-help{display:none}
   #panel{top:10px;right:10px;width:min(330px,calc(100% - 20px));max-height:calc(100% - 20px);padding:14px}
   .actions{grid-template-columns:1fr}
@@ -155,13 +155,19 @@ export default async function(component) {
     panel.querySelector("#pc").onclick = e => { e.stopPropagation(); hidePanel(); };
     panel.querySelector("#analyze-btn").onclick = e => {
       e.stopPropagation();
+      const b = e.currentTarget;
+      b.textContent = "⏳ Opening analysis…";
+      b.disabled = true;
+      panel.querySelector("#report-btn").disabled = true;
       setTriggerValue("analyze_transaction", nodePayload(n));
     };
     panel.querySelector("#report-btn").onclick = e => {
       e.stopPropagation();
-      const payload = nodePayload(n);
-      console.log("[REPORT][GRAPH] Generate Report clicked", payload);
-      setTriggerValue("generate_report", payload);
+      const b = e.currentTarget;
+      b.textContent = "⏳ Preparing report…";
+      b.disabled = true;
+      panel.querySelector("#analyze-btn").disabled = true;
+      setTriggerValue("generate_report", nodePayload(n));
     };
   }
 

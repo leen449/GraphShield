@@ -542,13 +542,22 @@ def render_pdf(data: ReportData, executive_summary: str) -> bytes:
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
-def generate_report(session_id: str, selected_node: Dict[str, Any]) -> tuple[bytes, str]:
-    """Full pipeline: deterministic data + executive summary -> PDF bytes."""
+def generate_report(session_id, selected_node):
+    import time
     transaction_id = str(selected_node["txId"])
     node_index = selected_node.get("node_index")
 
+    t = time.perf_counter()
     data = build_report_data(transaction_id)
+    print(f"[REPORT] build_report_data: {time.perf_counter()-t:.3f}s")
+
+    t = time.perf_counter()
     summary = get_executive_summary(session_id, transaction_id, node_index)
+    print(f"[REPORT] executive_summary: {time.perf_counter()-t:.3f}s")
+
+    t = time.perf_counter()
     pdf_bytes = render_pdf(data, summary)
+    print(f"[REPORT] render_pdf: {time.perf_counter()-t:.3f}s")
+
     filename = f"{data.report_id}_{transaction_id}.pdf"
     return pdf_bytes, filename
