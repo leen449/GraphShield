@@ -141,6 +141,70 @@ def _get_azure_client() -> "OpenAI":
     return OpenAI(api_key=api_key, base_url=base_url, timeout=timeout_seconds)
 
 
+def _call_azure_openai_stream(system_prompt: str, task_prompt: str):
+    """
+    Streaming variant of _call_azure_openai. Yields text chunks as Azure
+    produces them instead of blocking until the full answer is ready.
+
+    Why this matters for perceived latency: per Microsoft's own guidance,
+    streaming does not reduce total generation time, but it returns the
+    first tokens in a fraction of the time, so the UI can show live text
+    instead of a silent wait for the full 8-17s. This is the standard
+    industry fix for reasoning-model latency (see Azure OpenAI latency docs).
+
+    Yields:
+        str chunks of the answer, in order. The caller is responsible for
+        concatenating them for storage/caching.
+
+    Raises:
+        RuntimeError if the stream completes with no content at all (mirrors
+        the empty-answer guard in the non-streaming path).
+    """
+    deployment = settings.AZURE_OPENAI_DEPLOYMENT
+    if not deployment:
+        raise RuntimeError("AZURE_OPENAI_DEPLOYMENT is not set in .env / config.py.")
+
+    reasoning_effort = os.environ.get("AZURE_OPENAI_REASONING_EFFORT", "low")
+    max_completion_tokens = int(os.environ.get("AZURE_OPENAI_MAX_COMPLETION_TOKENS", "2000"))
+
+    client = _get_azure_client()
+    stream = client.chat.completions.create(
+        model=deployment,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": task_prompt},
+        ],
+        max_completion_tokens=max_completion_tokens,
+        reasoning_effort=reasoning_effort,
+        stream=True,
+        stream_options={"include_usage": True},
+    )
+
+    total_chars = 0
+    finish_reason = None
+    for chunk in stream:
+        if not chunk.choices:
+            # The final usage-only chunk (from stream_options) has no choices.
+            continue
+        choice = chunk.choices[0]
+        delta = getattr(choice.delta, "content", None)
+        finish_reason = getattr(choice, "finish_reason", None) or finish_reason
+        if delta:
+            total_chars += len(delta)
+            yield delta
+
+    print(f"[LLM][stream] finish_reason={finish_reason} content_chars={total_chars} "
+          f"budget={max_completion_tokens}")
+
+    if total_chars == 0:
+        raise RuntimeError(
+            f"Azure returned an empty streamed answer (finish_reason={finish_reason}). "
+            f"For a reasoning model this usually means max_completion_tokens "
+            f"({max_completion_tokens}) is too low -- raise AZURE_OPENAI_MAX_COMPLETION_TOKENS "
+            f"in .env, and/or set AZURE_OPENAI_REASONING_EFFORT=minimal."
+        )
+
+
 def _call_azure_openai(system_prompt: str, task_prompt: str) -> str:
     """
     Calls the configured Azure OpenAI deployment using GPT-5-compatible
@@ -202,6 +266,67 @@ def _call_azure_openai(system_prompt: str, task_prompt: str) -> str:
         )
 
     return content
+
+
+def generate_explanation_stream(
+    context: TransactionContext,
+    request_type: str,
+    question_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
+    """
+    Streaming counterpart to generate_explanation(). Same validation, template
+    selection, and evidence whitelisting -- only the Azure call and return
+    shape differ.
+
+    Yields:
+        str chunks as they arrive from Azure. The caller should concatenate
+        them to build up the displayed text incrementally (e.g. append to a
+        placeholder in the UI on each chunk).
+
+    On a cache hit (initial analysis with a cached executive summary), this
+    yields the cached text as a single chunk immediately -- no Azure call.
+
+    Caching behavior matches generate_explanation(): once the stream is fully
+    consumed, the joined text is written to executive_summary_cache under the
+    same conditions (initial_analysis + session_id provided). Callers that
+    want caching MUST exhaust the generator (e.g. iterate it fully); caching
+    happens as the last step after the final chunk is yielded.
+    """
+    validate_request(
+        transaction_id=context.transaction_id,
+        selected_node=context.selected_node,
+        request_type=request_type,
+        question_id=question_id,
+    )
+
+    use_summary_cache = request_type == "initial_analysis" and session_id is not None
+
+    if request_type == "initial_analysis" and session_id is None:
+        logger.warning(
+            "Initial analysis (stream) called without session_id; cache will be skipped."
+        )
+
+    if use_summary_cache:
+        cached = executive_summary_cache.get(session_id, context.transaction_id)
+        if cached is not None:
+            yield cached
+            return
+
+    template_file = _select_template(request_type, question_id)
+    system_prompt = _load_prompt(SYSTEM_PROMPT_FILE)
+    task_template = _load_prompt(template_file)
+
+    evidence = _build_evidence(template_file, context)
+    task_prompt = _render_template(task_template, evidence)
+
+    chunks = []
+    for delta in _call_azure_openai_stream(system_prompt, task_prompt):
+        chunks.append(delta)
+        yield delta
+
+    if use_summary_cache:
+        executive_summary_cache.set(session_id, context.transaction_id, "".join(chunks))
 
 
 # ---------------------------------------------------------------------------

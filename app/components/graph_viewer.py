@@ -111,6 +111,37 @@ export default async function(component) {
   const panel = parentElement.querySelector("#panel");
   graphEl.style.height = height + "px";
 
+  let hoverTooltip = parentElement.querySelector("#graph-hover-tooltip");
+
+  if (!hoverTooltip) {
+    hoverTooltip = document.createElement("div");
+    hoverTooltip.id = "graph-hover-tooltip";
+    hoverTooltip.style.position = "absolute";
+    hoverTooltip.style.display = "none";
+    hoverTooltip.style.pointerEvents = "none";
+    hoverTooltip.style.zIndex = "30";
+    hoverTooltip.style.padding = "6px 9px";
+    hoverTooltip.style.borderRadius = "6px";
+    hoverTooltip.style.background = "rgba(17, 21, 29, 0.96)";
+    hoverTooltip.style.border = "1px solid #2b3140";
+    hoverTooltip.style.color = "#f5f7fb";
+    hoverTooltip.style.fontSize = "12px";
+    hoverTooltip.style.whiteSpace = "nowrap";
+    hoverTooltip.style.boxShadow = "0 6px 18px rgba(0, 0, 0, 0.24)";
+    hoverTooltip.style.transform = "translate(12px, 12px)";
+    parentElement.appendChild(hoverTooltip);
+  }
+
+  const positionHoverTooltip = event => {
+    if (!hoverTooltip || hoverTooltip.style.display === "none") return;
+
+    const rect = parentElement.getBoundingClientRect();
+    hoverTooltip.style.left = `${event.clientX - rect.left}px`;
+    hoverTooltip.style.top = `${event.clientY - rect.top}px`;
+  };
+
+  graphEl.addEventListener("mousemove", positionHoverTooltip);
+
   function fmtRisk(r){
     if(r===null||r===undefined)return"n/a";
     const pct=(Number(r)*100).toFixed(1)+"%";
@@ -153,13 +184,79 @@ export default async function(component) {
       ${reportError && selectedTxId === String(n.txId) ? `<div class="report-error">⚠️ ${escapeHtml(reportError)}</div>` : ""}`;
 
     panel.querySelector("#pc").onclick = e => { e.stopPropagation(); hidePanel(); };
+    function resetAnalyzeButton() {
+      const analyzeBtn = panel.querySelector("#analyze-btn");
+      const reportBtn = panel.querySelector("#report-btn");
+
+      if (analyzeBtn) {
+        analyzeBtn.textContent = "Analyze Transaction";
+        analyzeBtn.disabled = false;
+      }
+
+      if (reportBtn) {
+        reportBtn.disabled = false;
+      }
+    }
+
+    function waitForInvestigationSidebar() {
+      try {
+        const parentDoc = window.parent.document;
+
+        const existingSidebar =
+          parentDoc.querySelector(".st-key-investigation_sidebar");
+
+        if (existingSidebar) {
+          resetAnalyzeButton();
+          return;
+        }
+
+        const observer = new MutationObserver(() => {
+          const sidebar =
+            parentDoc.querySelector(".st-key-investigation_sidebar");
+
+          if (sidebar) {
+            resetAnalyzeButton();
+            observer.disconnect();
+          }
+        });
+
+        observer.observe(parentDoc.body, {
+          childList: true,
+          subtree: true
+        });
+      } catch (err) {
+        console.warn(
+          "[ANALYSIS][GRAPH] sidebar observer setup failed",
+          err
+        );
+
+        resetAnalyzeButton();
+      }
+    }
+
     panel.querySelector("#analyze-btn").onclick = e => {
       e.stopPropagation();
+
       const b = e.currentTarget;
+      const reportBtn = panel.querySelector("#report-btn");
+
+      if (b.disabled) {
+        return;
+      }
+
       b.textContent = "⏳ Opening analysis…";
       b.disabled = true;
-      panel.querySelector("#report-btn").disabled = true;
-      setTriggerValue("analyze_transaction", nodePayload(n));
+
+      if (reportBtn) {
+        reportBtn.disabled = true;
+      }
+
+      waitForInvestigationSidebar();
+
+      setTriggerValue(
+        "analyze_transaction",
+        nodePayload(n)
+      );
     };
     panel.querySelector("#report-btn").onclick = e => {
       e.stopPropagation();
@@ -235,25 +332,74 @@ export default async function(component) {
   if (!G) {
     G = ForceGraph3D()(graphEl)
       .backgroundColor("#0b0e14")
-      .nodeLabel(n=>`${String(n.group).toUpperCase()} · ${n.txId}`)
+      .nodeLabel(() => "")
       .nodeColor(n=>n.group==="target"?"#ff4d4d":n.group==="neighbor"?"#ffa64d":"#4dbd74")
       .nodeVal(n=>n.group==="target"?14:3+9*Number(n.gnn_importance || 0))
       .linkWidth(l=>0.5+5*Number(l.importance || 0))
       .linkColor(()=>"rgba(255,255,255,0.25)")
       .linkDirectionalParticles(1)
-      .linkDirectionalParticleWidth(l=>1+2*Number(l.importance || 0));
+      .linkDirectionalParticleWidth(l=>1+2*Number(l.importance || 0))
+      // Let the simulation run its natural cooldown once on initial load,
+      // then it settles on its own (default cooldownTicks). We do NOT set
+      // cooldownTicks(0) here, so the very first layout still animates in.
+      .onEngineStop(() => { parentElement.__graphShieldSettled = true; });
     parentElement.__graphShieldGraph = G;
   }
 
-  G.graphData(graphData)
-    .onNodeClick(n=>{
+  // graphData(...) is NOT a passive setter -- calling it tells 3d-force-graph
+  // the data changed, which reheats/restarts the force simulation, even if the
+  // data is identical. Streamlit's V2 component can re-invoke this render
+  // function on events like hover, so calling graphData() unconditionally on
+  // every invocation was re-triggering the simulation on every hover -- that
+  // reheat is what produced the "jump/push up" feeling. Guard it behind a
+  // hash of the actual data so it only runs when the graph truly changed.
+  const graphHash = JSON.stringify(graphData);
+  if (parentElement.__graphShieldHash !== graphHash) {
+    parentElement.__graphShieldHash = graphHash;
+    G.graphData(graphData);
+    // Once the simulation has already settled once before (e.g. a filter
+    // change after the initial load), don't let a data refresh reheat it
+    // into a long-running re-simulation -- resolve it near-instantly instead.
+    if (parentElement.__graphShieldSettled) {
+      G.cooldownTicks(0);
+    }
+  }
+
+  // Interaction handlers are cheap to (re)bind and are NOT the reheat source;
+  // rebinding them on every invocation is safe and keeps closures fresh.
+  G.onNodeClick(n=>{
       showPanel(n);
       const norm=Math.hypot(n.x||0,n.y||0,n.z||0) || 1;
       const dist=80, r=1+dist/norm;
       G.cameraPosition({x:(n.x||0)*r,y:(n.y||0)*r,z:(n.z||0)*r},n,800);
     })
-    .onNodeHover(n=>{ graphEl.style.cursor = n ? "pointer" : "default"; })
-    .onBackgroundClick(()=>{ hidePanel(); graphEl.style.cursor="default"; });
+    .onNodeHover(n=>{
+      graphEl.style.cursor = n ? "pointer" : "default";
+
+      if (!hoverTooltip) return;
+
+      if (n) {
+        const group = String(n.group || "").toUpperCase();
+        const txId = String(n.txId ?? n.id ?? "");
+
+        hoverTooltip.textContent =
+          group && txId
+            ? `${group} · ${txId}`
+            : (txId || group);
+
+        hoverTooltip.style.display = "block";
+      } else {
+        hoverTooltip.style.display = "none";
+      }
+    })
+    .onBackgroundClick(()=>{
+      hidePanel();
+      graphEl.style.cursor="default";
+
+      if (hoverTooltip) {
+        hoverTooltip.style.display = "none";
+      }
+    });
 
   if (selectedTxId) {
     const selectedNode = graphData.nodes.find(n => String(n.txId) === selectedTxId);
