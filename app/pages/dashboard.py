@@ -183,34 +183,16 @@ with st.expander("⚙️ Graph Settings", expanded=False):
     max_nb = col2.slider("Maximum Neighbors per Target", 10, 40, 25)
     num_norm = col3.slider("Normal Nodes", 5, 20, 10)
 
-# 2. Filters
-fcol1, fcol2 = st.columns(2)
-show_pred = fcol1.multiselect(
-    "Prediction",
-    ["Suspicious", "Normal"],
-    default=["Suspicious", "Normal"],
-)
-show_true = fcol2.multiselect(
-    "True Label",
-    ["Illicit", "Licit"],
-    default=["Illicit", "Licit"],
-)
-
 pred_df_filtered = d["pred_df"].copy()
-pred_labels = pred_df_filtered["pred"].map({1: "Suspicious", 0: "Normal"})
-true_labels = pred_df_filtered["true_label"].map({1: "Illicit", 0: "Licit"})
-pred_df_filtered = pred_df_filtered[
-    pred_labels.isin(show_pred) & true_labels.isin(show_true)
-]
+
 
 # 3. Graph data memoization: rebuild only when controls or filters change.
 graph_cache_key = (
     top_n,
     max_nb,
     num_norm,
-    tuple(sorted(show_pred)),
-    tuple(sorted(show_true)),
 )
+
 
 if st.session_state.graph_cache_key != graph_cache_key:
     started = time.perf_counter()
@@ -231,6 +213,9 @@ if st.session_state.graph_cache_key != graph_cache_key:
     print(f"[PERF] build_graph_data: {time.perf_counter() - started:.3f}s")
 
 graph_data = st.session_state.graph_cache_value
+
+st.markdown("<div style='height:40px'></div>", unsafe_allow_html=True)
+
 st.caption(
     f"Showing {len(graph_data['nodes'])} nodes · {len(graph_data['links'])} edges · click any node to investigate"
 )
@@ -240,6 +225,8 @@ events = render_graph(
     height=650,
     selected_txid=(st.session_state.selected_node or {}).get("txId"),
 )
+
+st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
 
 # Node selection remains independent from analysis. A node switch clears stale
 # investigation content but never calls Azure automatically.
