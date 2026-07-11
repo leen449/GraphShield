@@ -234,6 +234,34 @@ body.gs-light [data-baseweb="select"] > div {
 
 /* ---- Investigation side panel: card look for background + response area, restyled chips + close (both themes) ---- */
 /* DARK (default) --- the whole sidebar reads as one dark teal card */
+/* Streaming-without-rerun: the questions block is emitted BEFORE the response
+   block in source order so a click can be handled and the response area can
+   stream in the same render pass. Restore visual order: answer on top,
+   questions at the bottom. Because Streamlit wraps every keyed container in
+   several ancestor divs, .st-key-* elements are NOT direct children of the
+   sidebar, so `order` on them has no effect. Instead: make every plausible
+   flex-capable ancestor inside the sidebar a flex column, and use :has() at
+   several nesting depths to reach the positional wrapper Streamlit put around
+   our keyed containers. Redundant selectors ensure at least one matches. */
+.st-key-investigation_sidebar,
+.st-key-investigation_sidebar > div,
+.st-key-investigation_sidebar > div > div,
+.st-key-investigation_sidebar [data-testid="stVerticalBlockBorderWrapper"],
+.st-key-investigation_sidebar [data-testid="stVerticalBlockBorderWrapper"] > div,
+.st-key-investigation_sidebar [data-testid="stVerticalBlock"] {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.st-key-investigation_sidebar *:has(> .st-key-investigation_response_wrap),
+.st-key-investigation_sidebar *:has(> * > .st-key-investigation_response_wrap),
+.st-key-investigation_sidebar *:has(> * > * > .st-key-investigation_response_wrap) {
+  order: 1 !important;
+}
+.st-key-investigation_sidebar *:has(> .st-key-investigation_questions_area),
+.st-key-investigation_sidebar *:has(> * > .st-key-investigation_questions_area),
+.st-key-investigation_sidebar *:has(> * > * > .st-key-investigation_questions_area) {
+  order: 2 !important;
+}
 .st-key-investigation_sidebar {
   background: linear-gradient(180deg,#0d4054 0%,#0a3646 100%) !important;
   border-right: 1px solid rgba(255,255,255,.10) !important;
@@ -974,11 +1002,21 @@ if report_request:
 # render_graph above is never re-executed by these clicks, which removes the
 # 3D graph re-render cost from them. st.rerun() called from inside a fragment
 # is automatically scoped to the fragment, not the full app.
+# Poll the fragment ONLY while the initial-analysis stream is in-flight AND
+# nothing else is displayed in the response area. Once the user is reading a
+# settled answer -- either the initial analysis text or a question answer --
+# or a question is currently streaming inline (writes directly into the
+# placeholder), polling would just repaint the response area every 500ms and
+# cause a visible blink while the user reads. The gate below disables the
+# poll in those cases.
 _panel_poll_interval = (
     0.5
     if (
         st.session_state.sidebar_open
         and st.session_state.initial_analysis_pending
+        and st.session_state.question_pending_id is None
+        and not st.session_state.question_answer_text
+        and not st.session_state.initial_analysis_text
     )
     else None
 )
@@ -1022,6 +1060,24 @@ def investigation_panel():
         elif analysis_status == "running":
             st.session_state.initial_analysis_pending = True
 
+    # If the fragment is being auto-polled (run_every=0.5) but the poll gate
+    # condition no longer holds -- typically because the initial-analysis
+    # finished, or the user just clicked a question -- the poll interval
+    # captured by @st.fragment at module top-level is stale. Fragment reruns
+    # don't re-evaluate decorator arguments, so the panel would keep polling
+    # every 500ms forever inside this fragment. Trigger ONE full-script rerun
+    # to recompute _panel_poll_interval to None; from then on the fragment
+    # sits still until the user actually interacts.
+    _should_poll_now = (
+        st.session_state.sidebar_open
+        and st.session_state.initial_analysis_pending
+        and st.session_state.question_pending_id is None
+        and not st.session_state.question_answer_text
+        and not st.session_state.initial_analysis_text
+    )
+    if _panel_poll_interval is not None and not _should_poll_now:
+        st.rerun()
+
     with st.container(key="investigation_sidebar"):
         hcol1, hcol2 = st.columns([4, 1])
         hcol1.markdown(f"### 🔎 Transaction {selected['txId']}")
@@ -1036,68 +1092,78 @@ def investigation_panel():
             st.session_state.active_run_token = None
             st.rerun()
 
-        st.markdown("**Investigation Response**")
-        with st.container(key="investigation_response_area"):
-            response_placeholder = st.empty()
-
-            if st.session_state.question_pending_id is not None:
-                # Stream directly into the placeholder now, in this same pass,
-                # so text appears live instead of a silent block-then-rerun.
-                response_placeholder.markdown("⏳ Answering the selected question...")
-                _run_question_streaming(
-                    selected,
-                    st.session_state.question_pending_id,
-                    response_placeholder,
-                    st.session_state.active_run_token,
-                )
-            elif st.session_state.question_error:
-                response_placeholder.markdown(
-                    f'<div class="error-box">⚠️ {st.session_state.question_error}</div>',
-                    unsafe_allow_html=True,
-                )
-            elif st.session_state.question_answer_text:
-                response_placeholder.markdown(st.session_state.question_answer_text)
-            elif st.session_state.initial_analysis_pending:
-                if analysis_job and analysis_job.get("partial_text"):
-                    response_placeholder.markdown(
-                        analysis_job["partial_text"] + " ▌"
-                    )
-                else:
-                    response_placeholder.markdown(
-                        "⏳ Running initial analysis..."
-                    )
-            elif st.session_state.initial_analysis_error:
-                response_placeholder.markdown(
-                    f'<div class="error-box">⚠️ {st.session_state.initial_analysis_error}</div>',
-                    unsafe_allow_html=True,
-                )
-            elif st.session_state.initial_analysis_text:
-                response_placeholder.markdown(st.session_state.initial_analysis_text)
-            else:
-                response_placeholder.caption("No analysis is available yet.")
-
-        st.markdown("**Suggested Questions**")
+        # Render Suggested Questions FIRST (source order), so a click sets
+        # `question_pending_id` before the response area below is drawn. The
+        # response area then streams inline in the SAME render pass -- no
+        # st.rerun(), no placeholder-then-overwrite blink.
+        # We render the button row inside a scoped container so its DOM
+        # position in the sidebar visually stays after the response area via
+        # CSS ordering (see .st-key-investigation_sidebar rules).
         questions_locked = (
             st.session_state.initial_analysis_text is None
             or st.session_state.initial_analysis_pending
             or st.session_state.question_pending_id is not None
         )
 
-        for q_id, q_text in SUGGESTED_QUESTIONS:
-            if st.button(
-                q_text,
-                key=f"btn_{q_id}",
-                disabled=questions_locked,
-                use_container_width=True,
-            ):
-                st.session_state.question_pending_id = q_id
-                st.session_state.question_answer_text = None
-                st.session_state.question_error = None
-                # Fresh token: invalidates any stream still finishing from a
-                # previous question/analysis so it abandons instead of landing
-                # its result in the wrong place later.
-                st.session_state.active_run_token = uuid.uuid4().hex
-                st.rerun()
+        with st.container(key="investigation_questions_area"):
+            st.markdown("**Suggested Questions**")
+            for q_id, q_text in SUGGESTED_QUESTIONS:
+                if st.button(
+                    q_text,
+                    key=f"btn_{q_id}",
+                    disabled=questions_locked,
+                    use_container_width=True,
+                ):
+                    st.session_state.question_pending_id = q_id
+                    st.session_state.question_answer_text = None
+                    st.session_state.question_error = None
+                    # Fresh token: invalidates any stream still finishing from a
+                    # previous question/analysis so it abandons instead of landing
+                    # its result in the wrong place later.
+                    st.session_state.active_run_token = uuid.uuid4().hex
+                    # NOTE: no st.rerun() here -- see comment above. The response
+                    # area below will see the freshly-set pending id and stream.
+
+        with st.container(key="investigation_response_wrap"):
+            st.markdown("**Investigation Response**")
+            with st.container(key="investigation_response_area"):
+                response_placeholder = st.empty()
+
+                if st.session_state.question_pending_id is not None:
+                    # Stream directly into the placeholder now, in this same pass,
+                    # so text appears live instead of a silent block-then-rerun.
+                    response_placeholder.markdown("⏳ Answering the selected question...")
+                    _run_question_streaming(
+                        selected,
+                        st.session_state.question_pending_id,
+                        response_placeholder,
+                        st.session_state.active_run_token,
+                    )
+                elif st.session_state.question_error:
+                    response_placeholder.markdown(
+                        f'<div class="error-box">⚠️ {st.session_state.question_error}</div>',
+                        unsafe_allow_html=True,
+                    )
+                elif st.session_state.question_answer_text:
+                    response_placeholder.markdown(st.session_state.question_answer_text)
+                elif st.session_state.initial_analysis_pending:
+                    if analysis_job and analysis_job.get("partial_text"):
+                        response_placeholder.markdown(
+                            analysis_job["partial_text"] + " ▌"
+                        )
+                    else:
+                        response_placeholder.markdown(
+                            "⏳ Running initial analysis..."
+                        )
+                elif st.session_state.initial_analysis_error:
+                    response_placeholder.markdown(
+                        f'<div class="error-box">⚠️ {st.session_state.initial_analysis_error}</div>',
+                        unsafe_allow_html=True,
+                    )
+                elif st.session_state.initial_analysis_text:
+                    response_placeholder.markdown(st.session_state.initial_analysis_text)
+                else:
+                    response_placeholder.caption("No analysis is available yet.")
 
 investigation_panel()
 
