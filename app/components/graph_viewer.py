@@ -108,10 +108,10 @@ body.gs-light #legend{background:rgba(7,80,106,.72)}
 #legend>div{display:flex;align-items:center;gap:7px;margin:7px 0;font-weight:700}
 #legend span{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:0;flex:0 0 auto;box-shadow:0 0 0 2px rgba(255,255,255,.08)}
 .legend-help{margin-top:8px;color:rgba(255,255,255,.65);font-size:9px;font-weight:500!important}
-/* rotate/zoom/pan hint: force a readable frosted pill on both themes */
-#graph .scene-nav-info,.scene-nav-info{opacity:1 !important;visibility:visible !important;padding:6px 12px !important;border-radius:12px !important;font-weight:600 !important;pointer-events:none !important;backdrop-filter:blur(8px) !important;-webkit-backdrop-filter:blur(8px) !important;text-shadow:none !important}
-body.gs-light #graph .scene-nav-info,body.gs-light .scene-nav-info{color:#083240 !important;background:rgba(255,255,255,.72) !important;border:1px solid rgba(6,49,66,.10) !important}
-body.gs-dark #graph .scene-nav-info,body.gs-dark .scene-nav-info,#graph .scene-nav-info{color:#ffffff !important;background:rgba(8,50,64,.72) !important;border:1px solid rgba(255,255,255,.14) !important;text-shadow:0 1px 2px rgba(0,0,0,.35) !important}
+/* rotate/zoom/pan hint: no pill background, keep readability via text-shadow */
+#graph .scene-nav-info,.scene-nav-info{opacity:1 !important;visibility:visible !important;background:transparent !important;border:none !important;padding:0 !important;font-weight:600 !important;pointer-events:none !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+body.gs-light #graph .scene-nav-info,body.gs-light .scene-nav-info{color:#083240 !important;text-shadow:0 1px 2px rgba(255,255,255,.6) !important}
+body.gs-dark #graph .scene-nav-info,body.gs-dark .scene-nav-info,#graph .scene-nav-info{color:#ffffff !important;text-shadow:0 1px 3px rgba(0,0,0,.75), 0 0 8px rgba(0,0,0,.55) !important}
 @media (max-width:900px){
   #legend{top:10px;left:10px;width:min(220px,calc(100% - 20px));font-size:10px;padding:11px 12px;border-radius:18px}
   #legend::before{font-size:15px;margin-bottom:7px}
@@ -255,7 +255,6 @@ export default async function(component) {
 
   function showPanel(n){
     panel.style.display="block";
-    const icon=n.group==="target"?"🎯":n.group==="neighbor"?"🔗":"✅";
     const label=n.group==="target"?"Target":(n.group==="neighbor"?"Neighbor":"Normal");
     const riskText = n.predicted_risk===null || n.predicted_risk===undefined
       ? "Risk n/a"
@@ -263,7 +262,7 @@ export default async function(component) {
     panel.innerHTML=`
       <button id="pc" aria-label="Close transaction details">✕</button>
       <div class="panel-top">
-        <div class="panel-title-wrap"><h3>${icon} ${escapeHtml(n.txId)}</h3></div>
+        <div class="panel-title-wrap"><h3>${escapeHtml(n.txId)}</h3></div>
         <div class="risk-pill">${escapeHtml(riskText)}</div>
       </div>
       <div class="info-grid">
@@ -271,9 +270,9 @@ export default async function(component) {
         <div class="info-box"><div class="lbl">Prediction</div><div class="val">${escapeHtml(n.prediction || "n/a")}</div></div>
         <div class="info-box"><div class="lbl">True Label</div><div class="val">${escapeHtml(n.true_label || "n/a")}</div></div>
         <div class="info-box"><div class="lbl">Risk Score</div><div class="val">${fmtRisk(n.predicted_risk)}</div></div>
-        <div class="info-box"><div class="lbl">GNN Importance</div><div class="val">${Number(n.gnn_importance || 0).toFixed(4)}</div></div>
         <div class="info-box"><div class="lbl">Positive SHAP Features</div><div class="val">${escapeHtml(n.shap_increasing_cat || "n/a")}</div><div class="raw">${escapeHtml(n.shap_increasing_raw || "")}</div></div>
-        <div class="info-box wide"><div class="lbl">Negative SHAP Features</div><div class="val">${escapeHtml(n.shap_decreasing_cat || "n/a")}</div><div class="raw">${escapeHtml(n.shap_decreasing_raw || "")}</div></div>
+        <div class="info-box"><div class="lbl">Negative SHAP Features</div><div class="val">${escapeHtml(n.shap_decreasing_cat || "n/a")}</div><div class="raw">${escapeHtml(n.shap_decreasing_raw || "")}</div></div>
+        <div class="info-box wide"><div class="lbl">GNN Importance</div><div class="val">${Number(n.gnn_importance || 0).toFixed(4)}</div></div>
         <div class="info-box"><div class="lbl">Transaction Profile Factors</div><div class="val">${listOrNA(n.transaction_profile_factors)}</div></div>
         <div class="info-box"><div class="lbl">Network Context Factors</div><div class="val">${listOrNA(n.network_context_factors)}</div></div>
       </div>

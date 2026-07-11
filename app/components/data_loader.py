@@ -17,7 +17,7 @@ PATHS = {
     "final_metrics":           os.path.join(ROOT, "results/metrics/final_metrics.json"),
 }
 
-@st.cache_resource(show_spinner="Loading artifacts…")
+@st.cache_resource(show_spinner=False)
 def load_all():
     missing = [k for k, p in PATHS.items() if not os.path.exists(p)]
     if missing:
