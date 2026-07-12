@@ -15,12 +15,35 @@ _HISTORY_CSS = """
 .report-history-toolbar { display:flex; justify-content:flex-end; align-items:center; margin:0 0 12px 0; }
 [class*="st-key-report_history_date_wrap"] { max-width:310px; margin-left:auto; }
 
+/* DARK: date filter (selectbox) control -> match the report-menu shade.
+   Native st.selectbox has no class in this file; target it by its widget key.
+   body:not(.gs-light) keeps light mode on Streamlit's default styling. */
+body:not(.gs-light) [class*="st-key-report_history_date_filter"] [data-baseweb="select"] > div {
+    background-color: rgba(58,79,89,1.000) !important;
+    border-color: rgba(255,255,255,.14) !important;
+}
+
+/* DARK: the OPEN dropdown list. It renders in a BaseWeb popover portal attached
+   to <body>, outside the st-key container, so it must be targeted globally.
+   This is the only styled selectbox, so app-wide scope is fine here. */
+body:not(.gs-light) [data-baseweb="popover"] [data-baseweb="menu"],
+body:not(.gs-light) [data-baseweb="popover"] [role="listbox"],
+body:not(.gs-light) [data-baseweb="popover"] [role="option"] {
+    background-color: rgba(58,79,89,1.000) !important;
+}
+body:not(.gs-light) [data-baseweb="popover"] [role="option"] { color:#eaf3f7 !important; }
+body:not(.gs-light) [data-baseweb="popover"] [role="option"]:hover,
+body:not(.gs-light) [data-baseweb="popover"] [role="option"][aria-selected="true"] {
+    background-color: rgba(46,73,82,1.000) !important;
+    color:#fff !important;
+}
+
 /* DARK default: #124f65 shade */
 .report-history-card {
     position: relative;
     width: 100%;
     box-sizing: border-box;
-    background: #124f65;
+    background:rgba(46,73,82,1.000);
     border: 1px solid rgba(255,255,255,.10);
     border-radius: 16px;
     padding: 18px 64px 16px 20px;
@@ -30,7 +53,7 @@ _HISTORY_CSS = """
     transition: background .18s ease, transform .18s ease, box-shadow .18s ease;
 }
 .report-history-card:hover {
-    background: #155972;
+    background:rgba(46,73,82,1.000);
     transform: translateY(-1px);
     box-shadow: 0 12px 28px rgba(0,0,0,.28), inset 0 1px 0 rgba(255,255,255,.06);
 }
@@ -53,14 +76,14 @@ _HISTORY_CSS = """
 .report-menu-panel {
     position:absolute; top:30px; right:0; min-width:155px; padding:6px;
     border-radius:10px; border:1px solid rgba(255,255,255,.14);
-    background:#0e4257; box-shadow:0 10px 26px rgba(0,0,0,.35); z-index:20;
+    background:rgba(58,79,89,1.000); box-shadow:0 10px 26px rgba(0,0,0,.35); z-index:20;
 }
 .report-download-link {
     display:block; white-space:nowrap; padding:8px 12px; border-radius:6px;
     color:#eaf3f7 !important; text-decoration:none !important;
     font-size:13px; text-align:left;
 }
-.report-download-link:hover { background: rgba(255,255,255,.08); color:#fff !important; }
+.report-download-link:hover { background: rgba(46,73,82,1.000); color:#fff !important; }
 
 /* LIGHT mode (matches the mockup) */
 body.gs-light .report-history-card {
@@ -210,4 +233,4 @@ def render_report_history(*, storage_error: str | None = None) -> None:
         return
 
     for index, report in enumerate(reports):
-        _render_card(report, index)  
+        _render_card(report, index)
