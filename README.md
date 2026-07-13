@@ -175,6 +175,8 @@ GraphShield/
 │        │
 │        └── test_llm_backend.py
 │
+│
+│
 ├── graphshield-ui/                       # ==== REACT FRONTEND ====
 │   └── src/
 │        ├── assets/                       
