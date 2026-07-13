@@ -7,8 +7,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import ForceGraph3D from "react-force-graph-3d";
 import "./index.css";
-import logoLight from "../../app/assets/photo_5949691588562849333_y-removebg-preview.png";
-import logoDark from "../../app/assets/Gemini_Generated_Image_bi207cbi207cbi20.png";
+import logoLight from "../../app/assets/Gemini_Generated_Image_bi207cbi207cbi20.png";
+import logoDark from "../../app/assets/photo_5949691588562849333_y-removebg-preview.png";
 import VerifyGate from "./VerifyGate";
 
 
