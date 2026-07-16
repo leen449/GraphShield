@@ -233,6 +233,16 @@ GraphShield/
  
 ---
  
+## Prerequisites
+
+Before installing and running GraphShield, make sure the following are installed on your device:
+
+- Node.js 18+
+- npm
+- Python 3.10+
+
+---
+
 ## Running the App
  
 ```bash
