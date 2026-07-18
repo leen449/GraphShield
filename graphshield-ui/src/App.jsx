@@ -75,6 +75,11 @@ export default function App() {
   const [maxNb, setMaxNb] = useState(25);
   const [numNorm, setNumNorm] = useState(10);
 
+  // Graph <-> Table view toggle + table controls
+  const [view, setView] = useState("graph");        // "graph" | "table"
+  const [tableSearch, setTableSearch] = useState("");
+  const [groupFilter, setGroupFilter] = useState("All");
+
   const [dark, setDark] = useState(
     () => window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? true
   );
@@ -82,6 +87,7 @@ export default function App() {
   const esRef = useRef(null);
   const fgRef = useRef(null);
   const debounceRef = useRef(null);
+  const pendingFocusRef = useRef(null); // node to fly to once graph view is visible
 
   useEffect(() => {
     document.body.classList.toggle("gs-dark", dark);
@@ -121,19 +127,55 @@ export default function App() {
   useEffect(() => { loadHistory(); }, []);
   useEffect(() => () => esRef.current?.close(), []);
 
-  function handleNodeClick(node) {
-    esRef.current?.close();
-    setSelected(node);
-    // clicking a different node closes the investigation view
-    setInvOpen(false);
-    setAnalysisText(""); setResponseText(""); setQPending(null); setAnalysisPending(false);
+  // Fly the camera to a node. Safe to call any time the graph canvas is mounted.
+  const focusCamera = useCallback((node) => {
     const distance = 120;
     const hyp = Math.hypot(node.x || 0, node.y || 0, node.z || 0) || 1;
     const r = 1 + distance / hyp;
     fgRef.current?.cameraPosition(
       { x: (node.x || 0) * r, y: (node.y || 0) * r, z: (node.z || 0) * r }, node, 800
     );
+  }, []);
+
+  // Shared selection reset used by both node clicks and table-row clicks.
+  function selectNode(node) {
+    esRef.current?.close();
+    setSelected(node);
+    // selecting a different node closes the investigation view
+    setInvOpen(false);
+    setAnalysisText(""); setResponseText(""); setQPending(null); setAnalysisPending(false);
   }
+
+  function handleNodeClick(node) {
+    selectNode(node);
+    focusCamera(node);
+  }
+
+  // Details-panel X: close the card AND any investigation content together,
+  // so a half-open (empty white) sidebar can't be left behind.
+  function closePanel() {
+    esRef.current?.close();
+    setSelected(null);
+    setInvOpen(false);
+    setAnalysisText(""); setResponseText(""); setQPending(null); setAnalysisPending(false);
+  }
+
+  // Table row -> switch to the graph, then fly to the node once it's visible.
+  function handleRowClick(node) {
+    selectNode(node);
+    pendingFocusRef.current = node;
+    setView("graph");
+  }
+
+  // After the view flips back to the graph, run any pending camera fly-to.
+  useEffect(() => {
+    if (view !== "graph") return;
+    const node = pendingFocusRef.current;
+    if (!node) return;
+    pendingFocusRef.current = null;
+    const t = setTimeout(() => focusCamera(node), 80);
+    return () => clearTimeout(t);
+  }, [view, focusCamera]);
 
   // Generic SSE runner. onDone lets us flip pending flags per call type.
   function stream({ questionId, onToken, onDone }) {
@@ -233,6 +275,16 @@ export default function App() {
   const questionsLocked = analysisPending || !analysisText || qPending !== null;
   const linkColor = dark ? LINK_DARK : LINK_LIGHT;
 
+  // ----- Table view: filter the same graph.nodes the graph already renders -----
+  const GROUP_LABEL = { target: "Target", neighbor: "Neighbor", normal: "Normal" };
+  const riskPct = (v) => (v != null ? `${(Number(v) * 100).toFixed(1)}%` : "n/a");
+  const tableRows = graph.nodes.filter((n) => {
+    const okGroup = groupFilter === "All" || n.group === groupFilter.toLowerCase();
+    const q = tableSearch.trim();
+    const okSearch = !q || String(n.txId).includes(q);
+    return okGroup && okSearch;
+  });
+
   return (
     <>
       {!verified && <VerifyGate onVerified={() => setVerified(true)} />}
@@ -310,8 +362,19 @@ export default function App() {
           </div>
         </div>
 
-        <div className="count-caption">
-          Showing {graph.nodes.length} nodes · {graph.links.length} edges · click any node to investigate
+        <div className="view-bar">
+          <div className="view-toggle" role="tablist">
+            <button className={view === "graph" ? "active" : ""} onClick={() => setView("graph")}>
+              Graph
+            </button>
+            <button className={view === "table" ? "active" : ""} onClick={() => setView("table")}>
+              Table
+            </button>
+          </div>
+          <div className="count-caption">
+            Showing {graph.nodes.length} nodes · {graph.links.length} edges · click any{" "}
+            {view === "table" ? "row" : "node"} to investigate
+          </div>
         </div>
 
         {/* ===== Graph + card + legend ===== */}
@@ -326,7 +389,7 @@ export default function App() {
 
           {selected && (
             <div className="panel">
-              <button className="pc" onClick={() => setSelected(null)}>{"\u2715"}</button>
+              <button className="pc" onClick={closePanel}>{"\u2715"}</button>
               <div className="panel-top">
                 <h3>{selected.txId}</h3>
                 <div className="risk-pill">{riskText}</div>
@@ -375,6 +438,71 @@ export default function App() {
             onNodeClick={handleNodeClick}
             backgroundColor={dark ? GRAPH_BG_DARK : GRAPH_BG_LIGHT}
           />
+
+          {/* ===== Table overlay (graph stays mounted underneath) ===== */}
+          {view === "table" && (
+            <div className="table-overlay">
+              <div className="table-tools">
+                <input
+                  className="table-search"
+                  placeholder="Search txId…"
+                  value={tableSearch}
+                  onChange={(e) => setTableSearch(e.target.value)}
+                />
+                <select
+                  className="table-group"
+                  value={groupFilter}
+                  onChange={(e) => setGroupFilter(e.target.value)}
+                >
+                  <option>All</option>
+                  <option>Target</option>
+                  <option>Neighbor</option>
+                  <option>Normal</option>
+                </select>
+                <span className="table-count">{tableRows.length} shown</span>
+              </div>
+
+              <div className="table-scroll">
+                <table className="tx-table">
+                  <thead>
+                    <tr>
+                      <th>txId</th>
+                      <th>Group</th>
+                      <th>Prediction</th>
+                      <th>True Label</th>
+                      <th>Risk</th>
+                      <th>GNN Imp.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableRows.map((n) => (
+                      <tr
+                        key={n.id}
+                        className={selected?.txId === n.txId ? "row-selected" : ""}
+                        onClick={() => handleRowClick(n)}
+                      >
+                        <td className="mono">{n.txId}</td>
+                        <td>
+                          <span className={`grp grp-${n.group}`}>
+                            {GROUP_LABEL[n.group] || n.group}
+                          </span>
+                        </td>
+                        <td>{n.prediction || "n/a"}</td>
+                        <td>{n.true_label || "n/a"}</td>
+                        <td>{riskPct(n.predicted_risk)}</td>
+                        <td className="mono">{Number(n.gnn_importance || 0).toFixed(4)}</td>
+                      </tr>
+                    ))}
+                    {tableRows.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="table-empty">No transactions match.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ===== Report History ===== */}
